@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Snake Game with Enemy</title>
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background: linear-gradient(to bottom, #f0f0f0, #d9d9d9);
+            font-family: Arial, sans-serif;
+        }
+        canvas {
+            background-color: #000;
+            border: 5px solid #333;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.5);
+        }
+        #info {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: #333;
+            background: rgba(255, 255, 255, 0.8);
+            padding: 15px;
+            border-radius: 10px;
+            font-size: 18px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
+        }
+        #info div {
+            margin-bottom: 10px;
+        }
+        #info span {
+            font-weight: bold;
+        }
+        .label {
+            font-size: 16px;
+            color: #fff;
+            position: absolute;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 2px 5px;
+            border-radius: 3px;
+        }
+        #playerLabel {
+            color: #00ff00;
+            text-shadow: 1px 1px 2px #000;
+        }
+        #enemyLabel {
+            color: #0000ff;
+            text-shadow: 1px 1px 2px #000;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas" width="400" height="400"></canvas>
+    <div id="info">
+        <div>Speed: <span id="speed">1</span></div>
+        <div>Snake Length: <span id="snakeLength">1</span></div>
+        <div>Enemy Length: <span id="enemyLength">1</span></div>
+    </div>
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        const scale = 20;
+        const rows = canvas.height / scale;
+        const cols = canvas.width / scale;
+        const snakeSpeed = scale; // Speed of the snake (1 cell every 0.2 seconds)
+        const enemySpeed = scale / 2; // Speed of the enemy (1 cell every 0.4 seconds)
+
+        let snake = [];
+        let snakeLength = 1;
+        let food = {};
+        let enemy = {};
+        let powerUp = {};
+        let dx = snakeSpeed;
+        let dy = 0;
+        let enemyDx = enemySpeed;
+        let enemyDy = 0;
+        let isGameOver = false;
+
+        function init() {
+            snake = [{ x: Math.floor(cols / 2) * scale, y: Math.floor(rows / 2) * scale }];
+            snakeLength = 1;
+            dx = snakeSpeed;
+            dy = 0;
+            enemyDx = enemySpeed;
+            enemyDy = 0;
+            placeFood();
+            placeEnemy();
+            placePowerUp();
+            isGameOver = false;
+            document.addEventListener('keydown', changeDirection);
+            updateInfo();
+            setInterval(update, 200); // Update every 0.2 seconds (speed of the snake)
+            setInterval(placePowerUp, 5000); // Place power-up every 5 seconds
+        }
+
+        function update() {
+            if (isGameOver) return;
+            moveSnake();
+            checkCollision();
+            moveEnemy();
+            checkEnemyCollision();
+            checkPowerUpCollision();
+            draw();
+        }
+
+        function moveSnake() {
+            const head = { x: snake[0].x + dx, y: snake[0].y + dy };
+            snake.unshift(head);
+
+            if (head.x === food.x && head.y === food.y) {
+                snakeLength++;
+                placeFood();
+                updateInfo();
+            } else {
+                snake.pop();
+            }
+        }
+
+        function moveEnemy() {
+            // Randomly change direction of enemy
+            if (Math.random() < 0.1) {
+                const directions = [
+                    { x: snakeSpeed, y: 0 }, { x: -snakeSpeed, y: 0 },
+                    { x: 0, y: snakeSpeed }, { x: 0, y: -snakeSpeed }
+                ];
+                const dir = directions[Math.floor(Math.random() * directions.length)];
+                enemyDx = dir.x;
+                enemyDy = dir.y;
+            }
+
+            enemy.x += enemyDx;
+            enemy.y += enemyDy;
+
+            // Make sure enemy stays within canvas bounds
+            if (enemy.x < 0) enemy.x = canvas.width - scale;
+            if (enemy.x >= canvas.width) enemy.x = 0;
+            if (enemy.y < 0) enemy.y = canvas.height - scale;
+            if (enemy.y >= canvas.height) enemy.y = 0;
+        }
+
+        function checkCollision() {
+            const head = snake[0];
+
+            if (head.x < 0 || head.x >= canvas.width || head.y < 0 || head.y >= canvas.height) {
+                endGame('ゲームオーバー!');
+            }
+
+            for (let i = 1; i < snake.length; i++) {
+                if (head.x === snake[i].x && head.y === snake[i].y) {
+                    endGame('ゲームオーバー!');
+                }
+            }
+        }
+
+        function checkEnemyCollision() {
+            const head = snake[0];
+            // Check if enemy collides with the player's body but not the head
+            if (enemy.x === head.x && enemy.y === head.y) {
+                endGame('敵に当たりました! ゲームオーバー!');
+            }
+
+            // Check if enemy collides with any part of the snake's body
+            for (let i = 1; i < snake.length; i++) {
+                if (enemy.x === snake[i].x && enemy.y === snake[i].y) {
+                    endGame('プレイヤーの勝利!');
+                }
+            }
+        }
+
+        function checkPowerUpCollision() {
+            const head = snake[0];
+            if (head.x === powerUp.x && head.y === powerUp.y) {
+                snakeLength++;
+                placePowerUp();
+                updateInfo();
+            }
+            if (enemy.x === powerUp.x && enemy.y === powerUp.y) {
+                // If enemy collects the power-up, you can add similar logic for enemy growth if needed
+                placePowerUp();
+            }
+        }
+
+        function placeFood() {
+            food = {
+                x: Math.floor(Math.random() * cols) * scale,
+                y: Math.floor(Math.random() * rows) * scale
+            };
+        }
+
+        function placeEnemy() {
+            enemy = {
+                x: Math.floor(Math.random() * cols) * scale,
+                y: Math.floor(Math.random() * rows) * scale
+            };
+        }
+
+        function placePowerUp() {
+            powerUp = {
+                x: Math.floor(Math.random() * cols) * scale,
+                y: Math.floor(Math.random() * rows) * scale
+            };
+        }
+
+        function changeDirection(event) {
+            const key = event.keyCode;
+            if (key === 37 && dx === 0) { dx = -snakeSpeed; dy = 0; }
+            if (key === 38 && dy === 0) { dy = -snakeSpeed; dx = 0; }
+            if (key === 39 && dx === 0) { dx = snakeSpeed; dy = 0; }
+            if (key === 40 && dy === 0) { dy = snakeSpeed; dx = 0; }
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw snake
+            ctx.fillStyle = 'green';
+            for (let segment of snake) {
+                ctx.fillRect(segment.x, segment.y, scale, scale);
+            }
+
+            // Draw food
+            ctx.fillStyle = 'red';
+            ctx.fillRect(food.x, food.y, scale, scale);
+
+            // Draw enemy
+            ctx.fillStyle = 'blue';
+            ctx.fillRect(enemy.x, enemy.y, scale, scale);
+
+            // Draw power-up
+            ctx.fillStyle = 'yellow';
+            ctx.fillRect(powerUp.x, powerUp.y, scale, scale);
+
+            // Draw labels
+            ctx.fillStyle = 'white';
+            ctx.font = '16px Arial';
+            ctx.fillText('PLAYER', snake[0].x + scale / 4, snake[0].y - 5);
+            ctx.fillText('ENEMY', enemy.x + scale / 4, enemy.y - 5);
+        }
+
+        function updateInfo() {
+            document.getElementById('speed').textContent = 5; // Display constant speed
+            document.getElementById('snakeLength').textContent = snakeLength;
+            // Assuming enemy length is a fixed value or logic to determine it
+            document.getElementById('enemyLength').textContent = 1;
+        }
+
+        function endGame(message) {
+            alert(message);
+            isGameOver = true;
+            document.removeEventListener('keydown', changeDirection);
+            setTimeout(() => location.reload(), 100); // Reload the page after 100ms
+        }
+
+        init();
+    </script>
+</body>
+</html>
